@@ -210,7 +210,7 @@ t0 = time()
 # 4. For each new milestone, find nearest neighbors and attempt to connect them using check_collision (the number of neighbours it connects to is tunable)
 
 # Define the number of nearest neighbors to attempt connections with
-k_neighbors = 5 # can tune this depending on the performance desired
+k_neighbors = 8 # can tune this depending on the performance desired
 
 # Sampling a random 500 points in the maze and convert to maze coorindates since it's offset by 0.5
 while len(milestones) < nS:
@@ -271,16 +271,86 @@ t0 = time()
 spath = []  # list of milestone indices that form the shortest path
 
 # ------insert your shortest path finding code here-------
+# The workflow for Dijkstra's algorithm is as follows:
+# 1. Build an adjacency list which is where for each node, we store its neighbors and the cost to reach them
+# 2. Identify the start and goal indices in the milestones list
+# 3. Implement Dijkstra's algorithm to find the shortest path from start to goal
+# 4. Reconstruct the path from start to goal using the parent dictionary
+
+# 1. Build adjacency list
+graph = {} 
+for i in range(len(milestones)): # loop over all milestones (each node)
+    graph[i] = [] # initialize empty list for each node
+
+for e in edges: # loop through each edge in the PRM
+    x1, y1, x2, y2 = e # unpack edge coordinates
+
+    # finding the indices of the nodes in the milestones list
+    i = np.where((milestones == [x1, y1]).all(axis = 1))[0][0] # one end of the edge
+    j = np.where((milestones == [x2, y2]).all(axis = 1))[0][0] # other end of the edge
+
+    cost = np.sqrt((x1 - x2)**2 + (y1 - y2)**2) # Euclidean distance as cost
+
+    # this part just adds the edge to the adjacency list in both directions since it's undirected
+    graph[i].append((j, cost))
+    graph[j].append((i, cost))
+    
+    # by the end, graph will contain each node and its connected neighbors with costs
 
 
+# 2. Identify start and goal indices
+start_idx = np.where((milestones == start).all(axis = 1))[0][0] # np.where used to find the index; axis 1 because we want to check rows
+goal_idx  = np.where((milestones == finish).all(axis = 1))[0][0]
 
 
+# 3. Dijkstra algorithm
+dist = {} # distance from start to each node {0:0.0, 1:2.3, 2:4.2, 3:inf, ...}; so 3 is unreachable at the moment
+parent = {} # node that we came from to reach this node with shortest distance {0:None, 1:0, 2:1, 3:2, ...}
+visited = set() # nodes whose shortest distance from start is finalized (once a node goes in here, we never touch it again)
+
+for node in graph: # loop through all nodes in the graph
+    dist[node] = float('inf') # set that node's distance to infinity at start (don't know how to reach these nodes yet)
+    parent[node] = None # no parents at start
+
+dist[start_idx] = 0 # distance to start node from itself is 0
+
+while True: # keep searching until we find the goal or run out of nodes (we will manually break the loop)
+    # Find unvisited node with smallest distance
+    min_dist = float('inf')
+    current = None
+
+    for node in dist: # loop through all nodes (even though it loops through all nodes, only the neighbors will have finite distances so it will pick those)
+        if node not in visited and dist[node] < min_dist: # picking the unvisited node with smallest distance
+            min_dist = dist[node] # update smallest distance found
+            current = node # this node is now the best candidate to expand (initially it will be the start node because its distance is 0)
+
+    if current is None: 
+        break
+
+    if current == goal_idx:
+        break
+
+    visited.add(current) # initially add the start node to visited
+
+    for neighbor, cost in graph[current]: # loop through each neighbor of the current node
+        if neighbor in visited:
+            continue # skip already visited nodes
+
+        new_cost = dist[current] + cost # distance to reach neighbor through current node
+
+        if new_cost < dist[neighbor]: # if this path is better than what we knew before then update
+            dist[neighbor] = new_cost
+            parent[neighbor] = current # remembering how we reached this neighbor so we can reconstruct the path later
 
 
+# 4. Reconstruct path
+node = goal_idx
 
+while node is not None:
+    spath.append(node) # being built in reverse order from goal to start
+    node = parent[node]
 
-
-
+spath.reverse() # reverse to get path from start to goal
 
 # ------end of your shortest path finding code -------
 
@@ -292,7 +362,7 @@ print(f"Time elapsed: {elapsed:.4f} seconds")
 # plot the shortest path
 fig, ax = plt.subplots(figsize=(10, 8))
 ax.plot(np.array(milestones)[:, 0], np.array(milestones)[:, 1], 'm.', markersize=4)
-if edges:
+if len(edges) > 0:
     edges = np.array(edges)
     ax.plot([edges[:, 0], edges[:, 2]], [edges[:, 1], edges[:, 3]], 'magenta', alpha=0.5, linewidth=0.5)
 ax.plot(start[0], start[1], 'go', markersize=8)
@@ -319,8 +389,8 @@ plt.show()
 # seconds on your computer? (Anything larger than 40x40 will suffice for 
 # full marks)
 
-row = 25
-col = 25
+row = 40
+col = 40
 walls = maze(row, col)
 start = np.array([0.5, 1.0])
 finish = np.array([col + 0.5, row])
@@ -339,14 +409,83 @@ t0 = time()
 
 # ------insert your optimized algorithm here------
 
+# THE FOLLOWING ALGORITHM IS WHAT I TRIED TO DO TO OPTIMIZE THE PRM FROM QUESTION 1 BUT IT IS COMMENTED OUT BECAUSE IT DID NOT WORK AS INTENDED (TOO SLOW)
 
+# # The PRM algorithm from question 1 will not work very well here because of the size of the maze
+# # Since we have so many samples now, doing distance checks to every milestone, sorting distances, and collision checking all of the edges will be extremely slow
+# # In this algorithm, I will try to only allow for connections to milestones that are within a certain radius
 
+# # Milestone generations with optimization
+# attempts = 0 # to keep track of how many attempts we made to sample valid points because we don't to be stuck sampling in case we don't get too many good points
 
+# while len(milestones) < nS and attempts < nS * 10:
+#     x_rand = np.random.uniform(0.5, col + 0.5)
+#     y_rand = np.random.uniform(0.5, row + 0.5)
 
+#     candidate = np.array([x_rand, y_rand])
+    
+#     # Only accept points that are collision-free
+#     if min_dist_to_edges(candidate, walls):
+#         milestones.append(candidate.tolist())
+#     attempts += 1
+    
+# milestones = np.array(milestones)
 
+# # Now to connect the edges together but only to those in a certain radius so we're not checking too many edges
+# N = len(milestones)
 
+# for i in range(N):
+#     p = milestones[i] # current point to connect from
+#     connections = 0 # to keep track of how many connections we've made from this point
+#     indices = np.random.permutation(N) # random order of all other points to try connecting to
+    
+#     for j in indices: # loop through all other points in random order
+#         if i == j:
+#             continue # skip the same point
+        
+#         q = milestones[j] # candidate point to connect to
+#         dist = np.linalg.norm(p - q) # Euclidean distance
+        
+#         if dist > connect_radius:
+#             continue # skip if it's outside the connection radius
+        
+#         # Check for collision and add edge if collision-free
+#         if check_collision(p[0], p[1], q[0], q[1], walls):
+#             edges.append([p[0], p[1], q[0], q[1]])
+#             connections += 1
+            
+#             if connections >= max_edges:
+#                 break # stop if we've reached the maximum number of edges from this point
 
+# INSTEAD, I READ ABOUT SOME GRID-BASED METHODS AND TRIED TO IMPLEMENT THIS INSTEAD
 
+# So instead of randomly sampling the entire maze, we can divide the maze into a grid of cells and sample within each cell
+# Replaces random sampling with deterministic sampling
+x_pts = np.arange(0.5, col + 0.5, 0.5)
+y_pts = np.arange(0.5, row + 0.5, 0.5)
+
+for x in x_pts:
+    for y in y_pts:
+        p = np.array([x, y])
+
+        # geometry-based collision check (SAFE)
+        if min_dist_to_edges(p, walls) > 0.1:
+            milestones.append([x, y])
+
+milestones = np.array(milestones)
+
+# Now to connect each milestone to its k-nearest neighbors (fixed number of connections)
+k = 4
+
+for i in range(len(milestones)):
+    p = milestones[i]
+
+    dists = np.linalg.norm(milestones - p, axis=1)
+    nearest = np.argsort(dists)[1:k+1]
+
+    for j in nearest:
+        q = milestones[j]
+        edges.append([p[0], p[1], q[0], q[1]])
 
 
 # ------end of your optimized algorithm-------
@@ -357,9 +496,9 @@ if edges:
     edges = np.array(edges)
     ax.plot([edges[:, 0], edges[:, 2]], [edges[:, 1], edges[:, 3]], 'magenta', alpha=0.3, linewidth=0.3)
 
-if len(spath) > 1:
-    path_points = milestones[spath]
-    ax.plot(path_points[:, 0], path_points[:, 1], 'go-', linewidth=2, markersize=4)
+# if len(spath) > 1:
+#     path_points = milestones[spath]
+#     ax.plot(path_points[:, 0], path_points[:, 1], 'go-', linewidth=2, markersize=4)
 
 ax.set_title(f'Q3 - {row} X {col} Maze solved in {dt:.4f} seconds')
 plt.tight_layout()

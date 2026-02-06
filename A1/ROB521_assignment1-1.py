@@ -389,8 +389,8 @@ plt.show()
 # seconds on your computer? (Anything larger than 40x40 will suffice for 
 # full marks)
 
-row = 40
-col = 40
+row = 41
+col = 41
 walls = maze(row, col)
 start = np.array([0.5, 1.0])
 finish = np.array([col + 0.5, row])
@@ -409,55 +409,8 @@ t0 = time()
 
 # ------insert your optimized algorithm here------
 
-# THE FOLLOWING ALGORITHM IS WHAT I TRIED TO DO TO OPTIMIZE THE PRM FROM QUESTION 1 BUT IT IS COMMENTED OUT BECAUSE IT DID NOT WORK AS INTENDED (TOO SLOW)
-
-# # The PRM algorithm from question 1 will not work very well here because of the size of the maze
-# # Since we have so many samples now, doing distance checks to every milestone, sorting distances, and collision checking all of the edges will be extremely slow
-# # In this algorithm, I will try to only allow for connections to milestones that are within a certain radius
-
-# # Milestone generations with optimization
-# attempts = 0 # to keep track of how many attempts we made to sample valid points because we don't to be stuck sampling in case we don't get too many good points
-
-# while len(milestones) < nS and attempts < nS * 10:
-#     x_rand = np.random.uniform(0.5, col + 0.5)
-#     y_rand = np.random.uniform(0.5, row + 0.5)
-
-#     candidate = np.array([x_rand, y_rand])
-    
-#     # Only accept points that are collision-free
-#     if min_dist_to_edges(candidate, walls):
-#         milestones.append(candidate.tolist())
-#     attempts += 1
-    
-# milestones = np.array(milestones)
-
-# # Now to connect the edges together but only to those in a certain radius so we're not checking too many edges
-# N = len(milestones)
-
-# for i in range(N):
-#     p = milestones[i] # current point to connect from
-#     connections = 0 # to keep track of how many connections we've made from this point
-#     indices = np.random.permutation(N) # random order of all other points to try connecting to
-    
-#     for j in indices: # loop through all other points in random order
-#         if i == j:
-#             continue # skip the same point
-        
-#         q = milestones[j] # candidate point to connect to
-#         dist = np.linalg.norm(p - q) # Euclidean distance
-        
-#         if dist > connect_radius:
-#             continue # skip if it's outside the connection radius
-        
-#         # Check for collision and add edge if collision-free
-#         if check_collision(p[0], p[1], q[0], q[1], walls):
-#             edges.append([p[0], p[1], q[0], q[1]])
-#             connections += 1
-            
-#             if connections >= max_edges:
-#                 break # stop if we've reached the maximum number of edges from this point
-
-# INSTEAD, I READ ABOUT SOME GRID-BASED METHODS AND TRIED TO IMPLEMENT THIS INSTEAD
+# Random sampling in large mazes can lead to clustering of points in some areas and sparse coverage in others
+# This can lead to inefficient graphs that take longer to search and may not find paths even if they exist
 
 # So instead of randomly sampling the entire maze, we can divide the maze into a grid of cells and sample within each cell
 # Replaces random sampling with deterministic sampling
@@ -474,20 +427,157 @@ for x in x_pts:
 
 milestones = np.array(milestones)
 
-# Now to connect each milestone to its k-nearest neighbors (fixed number of connections)
-k = 4
+# # Now to connect each milestone to its k-nearest neighbors (fixed number of connections)
+# k = 6
+
+# for i in range(len(milestones)):
+#     p = milestones[i]
+
+#     dists = np.linalg.norm(milestones - p, axis=1)
+#     nearest = np.argsort(dists)[1:k+1]
+
+#     for j in nearest:
+#         q = milestones[j]
+#         if check_collision(p[0], p[1], q[0], q[1], walls):
+#             edges.append([p[0], p[1], q[0], q[1]])
+
+# Instead of k-nearest neighbors, we can connect each milestone to its 4 immediate grid neighbors (up, down, left, right)
+dx = 0.5
+milestone_set = set(map(tuple, milestones))  # O(1) lookup
+
+for x, y in milestones:
+
+    neighbors = [
+        (x + dx, y),
+        (x - dx, y),
+        (x, y + dx),
+        (x, y - dx)
+    ]
+
+    for nx, ny in neighbors:
+        if (nx, ny) in milestone_set:
+            edges.append([x, y, nx, ny])
+
+
+# Now, we find the shortest path using A* algorithm with lazy collision checking
+# So we will find the shortest path assuming all edges are valid, then check the edges in the found path for collisions
+# If any edge in the path is in collision, we remove it from the graph 
+
+# 0. Just a function that defines the heuristic for A* (Euclidean distance)
+def heuristic(i):
+    return np.linalg.norm(milestones[i] - milestones[goal_idx])
+
+#1. Building the adjacency list
+graph = {}
 
 for i in range(len(milestones)):
-    p = milestones[i]
+    graph[i] = [] # graph[node] = [(neighbor, cost), ...]
+    
+for e in edges:
+    x1, y1, x2, y2 = e
 
-    dists = np.linalg.norm(milestones - p, axis=1)
-    nearest = np.argsort(dists)[1:k+1]
+    # Find indices of the two endpoints
+    i = np.where((milestones == [x1, y1]).all(axis=1))[0][0]
+    j = np.where((milestones == [x2, y2]).all(axis=1))[0][0]
 
-    for j in nearest:
-        q = milestones[j]
-        edges.append([p[0], p[1], q[0], q[1]])
+    cost = np.sqrt((x1 - x2)**2 + (y1 - y2)**2)
 
+    graph[i].append((j, cost))
+    graph[j].append((i, cost))
+    
+# 2. Define the start and goal indices
+start_idx = np.where((milestones == start).all(axis=1))[0][0]
+goal_idx  = np.where((milestones == finish).all(axis=1))[0][0]
 
+# 3. Precomputing the heuristic for all nodes
+heuristic = {}
+
+for i in range(len(milestones)):
+    heuristic[i] = abs(milestones[i][0] - finish[0]) + abs(milestones[i][1] - finish[1])
+
+# 3.5 Lazy collision checking loop
+#while True:
+# 4. A* algorithm with lazy collision checking
+dist = {}        # g(n): cost-to-come
+parent = {}
+visited = set()
+
+for node in graph:
+    dist[node] = float('inf')
+    parent[node] = None
+
+dist[start_idx] = 0
+
+while True:
+
+    # Pick unvisited node with smallest f = g + h
+    min_f = float('inf')
+    current = None
+
+    for node in dist:
+        if node not in visited:
+            f = dist[node] + heuristic[node]
+            if f < min_f:
+                min_f = f
+                current = node
+
+    if current is None:
+        spath = None
+        break # no path found
+
+    if current == goal_idx:
+        break  # goal reached
+
+    visited.add(current)
+    
+    # Expanding neighbors
+    for neighbor, cost in graph[current]:
+
+        if neighbor in visited:
+            continue
+
+        p1 = milestones[current]
+        p2 = milestones[neighbor]
+
+        new_cost = dist[current] + cost
+
+        if new_cost < dist[neighbor]:
+            dist[neighbor] = new_cost
+            parent[neighbor] = current
+            
+# 5. Reconstruct path
+node = goal_idx
+spath = [] # list of milestone indices that form the shortest path
+
+while node is not None:
+    spath.append(node)
+    node = parent[node]
+
+spath.reverse()
+
+    # # Lazy collision checking on found path
+    # bad_edge = None
+
+    # for k in range(len(spath) - 1):
+    #     i = spath[k]
+    #     j = spath[k + 1]
+
+    #     p1 = milestones[i]
+    #     p2 = milestones[j]
+
+    #     if check_collision(p1[0], p1[1], p2[0], p2[1], walls):
+    #         bad_edge = (i, j)
+
+    # # If no collisions, we are done
+    # if bad_edge is None:
+    #     break
+
+    # # Otherwise remove ONE bad edge and replan
+    # i, j = bad_edge
+    # graph[i] = [(n, c) for (n, c) in graph[i] if n != j]
+    # graph[j] = [(n, c) for (n, c) in graph[j] if n != i]
+
+    
 # ------end of your optimized algorithm-------
 dt = time() - t0
 
@@ -496,9 +586,9 @@ if edges:
     edges = np.array(edges)
     ax.plot([edges[:, 0], edges[:, 2]], [edges[:, 1], edges[:, 3]], 'magenta', alpha=0.3, linewidth=0.3)
 
-# if len(spath) > 1:
-#     path_points = milestones[spath]
-#     ax.plot(path_points[:, 0], path_points[:, 1], 'go-', linewidth=2, markersize=4)
+if len(spath) > 1:
+    path_points = milestones[spath]
+    ax.plot(path_points[:, 0], path_points[:, 1], 'go-', linewidth=2, markersize=4)
 
 ax.set_title(f'Q3 - {row} X {col} Maze solved in {dt:.4f} seconds')
 plt.tight_layout()

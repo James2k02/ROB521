@@ -38,7 +38,7 @@ np.random.seed(1)
 #    laser angle limits: phi_min_laser phi_max_laser
 
 # load data (assumes the .mat file is in the same folder)
-data = loadmat('ROB521_assignment2_gazebo_data.mat')
+data = loadmat(r"A2\ROB521_assignment2_gazebo_data.mat")
 
 # helper to squeeze Matlab arrays to 1D where appropriate
 squeeze = lambda a: np.array(a).squeeze()
@@ -130,7 +130,7 @@ axs[3].set_title('heading error (odom-true)')
 
 plt.tight_layout()
 plt.show(block=False)
-fig.savefig('ass2_q1.png', dpi=150)
+fig.savefig(r"A2\ass2_q1.png", dpi=150)
 
 # =================================================================
 # Question 2: add noise to data and re-run wheel odometry algorithm
@@ -178,7 +178,7 @@ ax.set_title('path')
 ax.axis('equal')
 
 plt.show(block=False)
-fig2.savefig('ass2_q2.png', dpi=150)
+fig2.savefig(r"A2\ass2_q2.png", dpi=150)
 
 # After this loop, v_odom and omega_odom remain as the last noisy trial and can be used in the next question 
 # to build a map from noisy odometry.  You can also re-run this loop with different noise levels to see how 
@@ -232,31 +232,37 @@ for n in [1,2]:
     
     # loop over laser scans
     for i in range(t_laser.size):
-        continue    # remove, include to avoid template file crash
         # ------insert your point transformation algorithm here------
-    
+        # Laser scans and noisy odometry are now aligned.
+        # Transform the laser scans into the current robot frame.
+        # The laser is 10 cm behind the robot.
+        # Only plot for low rotational velocities to avoid interpolation errors.
+
+        if abs(omega_interp[i]) < 0.1:
+
+            # Transform laser scans into current robot frame
+            laser_curr_robo_x = (y_laser[i, :] + 0.1) * np.cos(angles)
+            laser_curr_robo_y = (y_laser[i, :] + 0.1) * np.sin(angles)
+
+            # Transform current frame laser scans into initial robot frame
+            laser_initial_robo_x = (
+                laser_curr_robo_x * np.cos(theta_interp[i])
+                - laser_curr_robo_y * np.sin(theta_interp[i])
+                + x_interp[i]
+            )
+
+            laser_initial_robo_y = (
+                laser_curr_robo_x * np.sin(theta_interp[i])
+                + laser_curr_robo_y * np.cos(theta_interp[i])
+                + y_interp[i]
+            )
+
+            # Plot the points
+            if n == 1:
+                plt.scatter(laser_initial_robo_x, laser_initial_robo_y, s=10, c='r')
+            else:
+                plt.scatter(laser_initial_robo_x, laser_initial_robo_y, s=10, c='b')
         
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     
         # ------end of your point transformation algorithm-------
         
@@ -265,6 +271,6 @@ ax3.set_aspect('equal')
 plt.show()
 
 # save each figure to disk
-fig3.savefig('ass2_q3.png', dpi=150)
+fig3.savefig(r"A2\ass2_q3.png", dpi=150)
 
 print('Saved ass2_q1.png, ass2_q2.png, ass2_q3.png')

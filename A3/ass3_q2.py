@@ -272,20 +272,57 @@ def main():
 
                 # ------insert your particle filter weight calculation here ------
 
+                range_pixel = measured_range / ogres
 
+                theta_laser = theta_particle[n] + angles[beam_index]
+                theta_laser = np.arctan2(np.sin(theta_laser), np.cos(theta_laser))
 
+                # particle position in grid
+                x_particle_pixel = int(round((x_particle[n] - ogxmin) / ogres))
+                y_particle_pixel = int(round((y_particle[n] - ogymin) / ogres))
 
+                x_idxs = []
+                y_idxs = []
 
+                # ray tracing
+                for step in range(1, int(np.ceil(range_pixel)) + 1):
 
+                    x_step = int(round(x_particle_pixel + step * np.cos(theta_laser)))
+                    y_step = int(round(y_particle_pixel + step * np.sin(theta_laser)))
 
+                    if x_step <= 0 or x_step >= width or y_step <= 0 or y_step >= height:
+                        break
 
+                    x_idxs.append(x_step)
+                    y_idxs.append(y_step)
 
+                # find closest occupied cell
+                threshold = 0.6
+                hit_found = False
 
+                for k in range(len(x_idxs)):
+                    xi = x_idxs[k]
+                    yi = y_idxs[k]
 
+                    if ogp[yi, xi] > threshold:
+                        hit_found = True
+                        break
 
+                # if no obstacle found, skip update
+                if not hit_found:
+                    continue
 
+                # convert back to world
+                x_end = xi * ogres + ogxmin
+                y_end = yi * ogres + ogymin
 
+                # predicted measurement
+                laser_pred = math.sqrt((x_end - x_particle[n])**2 + (y_end - y_particle[n])**2)
 
+                # Gaussian weight update (same as MATLAB normpdf)
+                w_particle[n] *= w_gain * (1.0 / normalizer) * np.exp(
+                    -0.5 * ((measured_range - laser_pred) ** 2) / laser_var
+                )
 
                 # ------end of your particle filter weight calculation-------
 

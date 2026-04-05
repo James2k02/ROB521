@@ -43,7 +43,7 @@ np.random.seed(1)
 #    laser range limits: r_min_laser r_max_laser
 #    laser angle limits: phi_min_laser phi_max_laser
 
-data = loadmat('gazebo.mat')
+data = loadmat(r"C:\Users\james\Documents\Github\MEng\ROB521\A3\gazebo.mat")
 
 t_true = data['t_true'].flatten()
 x_true = data['x_true'].flatten()
@@ -97,7 +97,7 @@ omega_interp = interp1d(t_interp, omega_odom, kind='linear')(t_laser)
 # Set up the video writer
 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 video_size = (4 * ognx, 4 * ogny)
-vid = cv2.VideoWriter('ass2_q1.mp4', fourcc, 10.0, video_size)
+vid = cv2.VideoWriter('ass3_q1.mp4', fourcc, 10.0, video_size)
 
 # Initialize figure for plotting
 fig = plt.figure(1, figsize=(10, 8))
@@ -129,30 +129,61 @@ log_odds_max = 5.0
 for i in range(0, t_laser.shape[0], 5):
     
     # ------insert your occupancy grid mapping algorithm here------
+    # Get current robot pose
+    x = (x_interp[i] - ogxmin) / ogres
+    y = (y_interp[i] - ogymin) / ogres
+
+    # Loop over each laser scan point
+    for j in range(npoints):
+
+        # Check valid laser range
+        if r_min_laser <= y_laser[i, j] <= r_max_laser:
+
+            # Convert range to grid units
+            range_pixel = y_laser[i, j] / ogres
+
+            # Compute laser angle
+            theta_laser = theta_interp[i] + angles[j]
+
+            # Normalize angle to [-pi, pi]
+            theta_laser = np.arctan2(np.sin(theta_laser), np.cos(theta_laser))
+
+            # Endpoint of ray
+            x_end = int(round(x + range_pixel * np.cos(theta_laser)))
+            y_end = int(round(y + range_pixel * np.sin(theta_laser)))
+
+            # Initialize ray indices
+            x_idxs = []
+            y_idxs = []
+
+            x_step = x
+            y_step = y
+
+            # Step along the ray
+            for step in range(1, int(np.ceil(range_pixel)) + 1):
+
+                x_step = int(round(x + step * np.cos(theta_laser)))
+                y_step = int(round(y + step * np.sin(theta_laser)))
+
+                # Stop if out of bounds
+                if x_step <= 0 or x_step > ognx or y_step <= 0 or y_step > ogny:
+                    break
+
+                x_idxs.append(x_step)
+                y_idxs.append(y_step)
+
+            # Update free space (decrease log-odds)
+            for k in range(len(x_idxs) - 1):
+                if (0 < x_idxs[k] <= ognx) and (0 < y_idxs[k] <= ogny):
+                    oglo[y_idxs[k], x_idxs[k]] -= 0.5
+
+            # Update occupied cell (endpoint)
+            if (0 < x_end <= ognx) and (0 < y_end <= ogny):
+                oglo[y_end, x_end] += 1.5
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    # Convert log-odds to probability
+    ogp = 1 - 1 / (1 + np.exp(oglo))
 
     # ------end of your occupancy grid mapping algorithm-------
     
@@ -186,7 +217,7 @@ for i in range(0, t_laser.shape[0], 5):
     plt.pause(0.1)
 
 vid.release()
-plt.savefig('ass2_q1.png', dpi=100, bbox_inches='tight')
+plt.savefig('ass3_q1_result.png', dpi=100, bbox_inches='tight')
 plt.close()
 
 # Save the occupancy grid map
@@ -204,6 +235,6 @@ sio.savemat('occmap.mat', {
 })
 
 print("Occupancy grid mapping complete!")
-print(f"Video saved as: ass2_q1.mp4")
-print(f"Map image saved as: ass2_q1.png")
+print(f"Video saved as: ass3_q1.mp4")
+print(f"Map image saved as: ass3_q1_result.png")
 print(f"Occupancy grid data saved as: occmap.mat")

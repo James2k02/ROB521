@@ -88,7 +88,7 @@ def draw_robot(ax, x_world, y_world, heading, cell_size, x_min, y_min):
 def main():
     # ---- toggle display and recordings ----
     SHOW_PLOT = True      # show live plot window during run
-    RECORD_VIDEO = False   # write frames to video file
+    RECORD_VIDEO = True   # write frames to video file
     # ---------------------------------------
 
     np.random.seed(1)
@@ -164,7 +164,7 @@ def main():
 
     if RECORD_VIDEO:
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        video = cv2.VideoWriter("ass2_q2.mp4", fourcc, 10.0, frame_size)
+        video = cv2.VideoWriter("ass3_q2.mp4", fourcc, 10.0, frame_size)
     else:
         video = None
 
@@ -360,13 +360,13 @@ def main():
     ax_err.set_title("error (estimate-true)")
     ax_err.legend(loc="upper left")
     fig_err.tight_layout()
-    fig_err.savefig("ass2_q2.png", dpi=150)
+    fig_err.savefig("ass3_q2_result.png", dpi=150)
     plt.close(fig_err)
 
     print("Particle filter localization complete!")
     if RECORD_VIDEO:
-        print("Video saved as: ass2_q2.mp4")
-    print("Error plot saved as: ass2_q2.png")
+        print("Video saved as: ass3_q2.mp4")
+    print("Error plot saved as: ass3_q2_result.png")
 
 
 if __name__ == "__main__":
